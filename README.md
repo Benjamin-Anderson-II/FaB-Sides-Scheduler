@@ -14,7 +14,7 @@ Breaks may occur at these times:
 
 
 
-### Misc
+### Constraints and Additional Information
 - Judge-Event ratio is 1-1
 - Judges are Full-Time (X Hours) or Half-Time (X Hours)
   - Full-Time gets two breaks:
