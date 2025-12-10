@@ -1,25 +1,11 @@
-#include "main.h"
-#include "utils.h"
+#include "events.h"
 
-int main (void) {
-    std::vector<Event> events;
-    std::vector<Judge> judges;
+int main (int argc, const char *argv[]) {
 
     // initialize variables
-    initEvents(events);
-    //initJudges(&judges);
-
-    printEvents(events);
+    Events events((char *)"test1.event");
+    events.sort();
+    events.print();
 
     return 0;
 }
-
-void initEvents(std::vector<Event> &events){
-    readEventsFromFile(events);
-    sortEvents(events);
-}
-
-void initJudges(std::vector<Judge> *judges){
-    //
-}
-

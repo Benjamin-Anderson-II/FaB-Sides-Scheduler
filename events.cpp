@@ -1,4 +1,9 @@
-#include "utils.h"
+#include "events.h"
+
+#include <string.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 int readline(char (*l)[256], FILE *f){
     char *r = fgets(*l, sizeof(*l), f);
@@ -31,15 +36,13 @@ size_t readField(char **str, char *out){
 
     return out_size;
 }
-
-/** EVENT FILE FORMAT
- *  Event_Name, Start_Time, Number_of_Rounds, Round_Length_(mins)
-*/
-void readEventsFromFile(std::vector<Event> &events) {
+Events::Events(char *fileName) {
+    this->startTime = 1000;
+    this->endTime = 0;
     // First line is header data
     char line[256];
     char field[128];
-    FILE *fptr = fopen("test1.event", "r");
+    FILE *fptr = fopen(fileName, "r");
     if(fptr == NULL){
         fprintf(stderr, "Whoopsie, that file doesn't exist\n");
         return;
@@ -57,11 +60,13 @@ void readEventsFromFile(std::vector<Event> &events) {
 
         // Read Start Time
         readField(&l, (char *)field);
-        start = atoi(field);
         if(field == 0){
             fprintf(stderr, "%s has an incorrect value for Start Time. Aborting\n", e.name);
             exit(1);
         }
+        start = atoi(field);
+        if(start < this->startTime)
+            this->startTime = start;
 
         // Read Num Rounds
         readField(&l, (char *)field);
@@ -83,9 +88,11 @@ void readEventsFromFile(std::vector<Event> &events) {
             Round r;
             r.startTime = start + (e.roundLength * i);
             e.rounds.push_back(r);
+            if(r.startTime + e.roundLength > this->endTime)
+                this->endTime = r.startTime + e.roundLength;
         }
 
-        events.push_back(e);
+        this->events.push_back(e);
     }
     fclose(fptr);
     return;
@@ -114,33 +121,28 @@ void sortEvents(std::vector<Event> &events, int low, int high){
     }
 }
 
-void sortEvents(std::vector<Event> &e) {
-    sortEvents(e, 0, e.size() - 1);
+void Events::sort() {
+    sortEvents(this->events, 0, this->events.size() - 1);
 }
 
-float getStartTime(std::vector<Event> events){
-    float ret = 9999;
-    for(auto e : events)
-        if(e.rounds[0].startTime < ret)
-            ret = e.rounds[0].startTime;
-    return ret;
+
+float Events::getStartTime(){
+    return this->startTime;
 }
-float getEndTime(std::vector<Event> events){
-    float ret = 0;
-    for(auto e : events)
-        if(e.rounds.back().startTime + e.roundLength > ret)
-            ret = e.rounds.back().startTime + e.roundLength;
-    return ret;
+float Events::getEndTime(){
+    return this->endTime;
+}
+std::vector<Event> Events::getEventsAsVector(){
+    return this->events;
 }
 
-void printEvents(std::vector<Event> events){
+void Events::print() {
     // Header
-    float startAll = getStartTime(events);
-    float endAll = getEndTime(events);
-    for(float i = startAll; i < endAll; i++)
+    for(float i = this->startTime; i < this->endTime; i++)
         printf("|%2d|.5", (int)i);
     printf("|\n");
 
+    std::vector<Event> events = this->events;
     for(int i = 0; i < events.size(); i++){
         std::vector<Round> rounds = events[i].rounds;
         char sub[10];
@@ -148,7 +150,7 @@ void printEvents(std::vector<Event> events){
         memcpy(sub, events[i].name, sublen);
         sub[sublen] = 0; // Compiler moves the sub declaration to outside the loop...
         // Print Leading blocks
-        for(float j = 0; j < rounds[0].startTime - startAll; j+=0.5)
+        for(float j = 0; j < rounds[0].startTime - this->startTime; j+=0.5)
             printf("|  ");
 
         int k = 0;
@@ -157,7 +159,7 @@ void printEvents(std::vector<Event> events){
         }
 
         float j = events[i].rounds[0].startTime + events[i].roundLength * events[i].numRounds;
-        for(; j < endAll; j+=0.5)
+        for(; j < this->endTime; j+=0.5)
             printf("|  ");
         printf("|\n");
     }
