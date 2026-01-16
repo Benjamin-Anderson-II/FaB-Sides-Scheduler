@@ -5,12 +5,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Constructor Helper */
 int readline(char (*l)[256], FILE *f){
     char *r = fgets(*l, sizeof(*l), f);
     (*l)[strcspn(*l, "\n")]=0;
     return (r) ? 1 : 0;
 }
-/* Modifies both the input and output strings */
+/* Constructor Helper */
 size_t readField(char **str, char *out){
     // trim leading
     while(isspace((unsigned char)*(*str))) (*str)++;
@@ -36,6 +37,7 @@ size_t readField(char **str, char *out){
 
     return out_size;
 }
+/* Constructor */
 Events::Events(char *fileName) {
     this->startTime = 1000;
     this->endTime = 0;
@@ -125,6 +127,9 @@ void Events::sort() {
     sortEvents(this->events, 0, this->events.size() - 1);
 }
 
+Event &Events::operator[](unsigned int i){
+    return this->events[i];
+}
 
 float Events::getStartTime(){
     return this->startTime;
@@ -164,3 +169,4 @@ void Events::print() {
         printf("|\n");
     }
 }
+
