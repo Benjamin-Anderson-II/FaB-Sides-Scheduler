@@ -1,4 +1,4 @@
-#include "events.h"
+#include "show.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -28,7 +28,7 @@ size_t readField(char **str, char *out){
     comma++;
 
     // copy trimmed string and add null terminator
-    size_t out_size = (comma - *str) < str_len ? (comma - *str) : str_len;
+    size_t out_size = (size_t)(comma - *str) < str_len ? (comma - *str) : str_len;
     memcpy(out, *str, out_size);
     out[out_size] = 0;
 
@@ -38,7 +38,7 @@ size_t readField(char **str, char *out){
     return out_size;
 }
 /* Constructor */
-Events::Events(char *fileName) {
+Show::Show(char *fileName) {
     this->startTime = 1000;
     this->endTime = 0;
     // First line is header data
@@ -54,7 +54,7 @@ Events::Events(char *fileName) {
     while(readline(&line, fptr)){
         Event e;
         char *l = (char *)line;
-        int start, num_rounds;
+        int start;
 
         // Read Name
         readField(&l, (char *)field);
@@ -62,18 +62,19 @@ Events::Events(char *fileName) {
 
         // Read Start Time
         readField(&l, (char *)field);
-        if(field == 0){
+        if(*field == 0){
             fprintf(stderr, "%s has an incorrect value for Start Time. Aborting\n", e.name);
             exit(1);
         }
         start = atoi(field);
+        e.startTime = start;
         if(start < this->startTime)
             this->startTime = start;
 
         // Read Num Rounds
         readField(&l, (char *)field);
         e.numRounds = atoi(field);
-        if(field == 0){
+        if(*field == 0){
             fprintf(stderr, "%s has an incorrect value for Number of Rounds. Aborting\n", e.name);
             exit(1);
         }
@@ -81,7 +82,7 @@ Events::Events(char *fileName) {
         // Read Round Length
         readField(&l, (char *)field);
         e.roundLength = (float)atoi(field) / 60;
-        if(field == 0){
+        if(*field == 0){
             fprintf(stderr, "%s has an incorrect value for Round Length. Aborting\n", e.name);
             exit(1);
         }
@@ -89,10 +90,12 @@ Events::Events(char *fileName) {
         for(int i = 0; i < e.numRounds; i++) {
             Round r;
             r.startTime = start + (e.roundLength * i);
+            r.endTime = r.startTime + e.roundLength;
             e.rounds.push_back(r);
             if(r.startTime + e.roundLength > this->endTime)
                 this->endTime = r.startTime + e.roundLength;
         }
+        e.endTime = e.rounds[0].startTime + e.numRounds * e.roundLength;
 
         this->events.push_back(e);
     }
@@ -115,55 +118,70 @@ int partition(std::vector<Event> &events, int low, int high){
     return (i+1);
 }
 
-void sortEvents(std::vector<Event> &events, int low, int high){
+void sortShow(std::vector<Event> &events, int low, int high){
     if(low < high) {
         int pi = partition(events, low, high);
-        sortEvents(events, low, pi - 1);
-        sortEvents(events, pi + 1, high);
+        sortShow(events, low, pi - 1);
+        sortShow(events, pi + 1, high);
     }
 }
 
-void Events::sort() {
-    sortEvents(this->events, 0, this->events.size() - 1);
+void Show::sort() {
+    sortShow(this->events, 0, this->events.size() - 1);
 }
 
-Event &Events::operator[](unsigned int i){
+void Show::push_back(Event event){
+    this->events.push_back(event);
+}
+
+void Show::pop(int index) {
+    this->events.erase(this->events.begin()+index);
+}
+
+bool Show::empty(){
+    return this->events.empty();
+}
+
+Event &Show::operator[](unsigned int i){
     return this->events[i];
 }
 
-float Events::getStartTime(){
+float Show::getStartTime(){
     return this->startTime;
 }
-float Events::getEndTime(){
+float Show::getEndTime(){
     return this->endTime;
 }
-std::vector<Event> Events::getEventsAsVector(){
+std::vector<Event> Show::getShowAsVector(){
     return this->events;
 }
 
-void Events::print() {
+size_t Show::size(){
+    return this->events.size();
+}
+
+void Show::print() {
     // Header
     for(float i = this->startTime; i < this->endTime; i++)
         printf("|%2d|.5", (int)i);
     printf("|\n");
 
     std::vector<Event> events = this->events;
-    for(int i = 0; i < events.size(); i++){
-        std::vector<Round> rounds = events[i].rounds;
+    for(size_t i = 0; i < events.size(); i++){
+        Event event = events[i];
         char sub[10];
         int sublen = events[i].roundLength * 5;
         memcpy(sub, events[i].name, sublen);
         sub[sublen] = 0; // Compiler moves the sub declaration to outside the loop...
         // Print Leading blocks
-        for(float j = 0; j < rounds[0].startTime - this->startTime; j+=0.5)
+        for(float j = 0; j < event.startTime - this->startTime; j+=0.5)
             printf("|  ");
 
-        int k = 0;
-        for(int k = 0; k < events[i].numRounds; k++){
+        for(int k = 0; k < event.numRounds; k++){
             printf("|%s", sub);
         }
 
-        float j = events[i].rounds[0].startTime + events[i].roundLength * events[i].numRounds;
+        float j = event.startTime + event.roundLength * event.numRounds;
         for(; j < this->endTime; j+=0.5)
             printf("|  ");
         printf("|\n");
