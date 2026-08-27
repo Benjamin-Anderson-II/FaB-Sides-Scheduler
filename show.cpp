@@ -1,188 +1,129 @@
 #include "show.h"
 
-#include <string.h>
-#include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <sstream>
+#include <cstdio>
 
-/* Constructor Helper */
-int readline(char (*l)[256], FILE *f){
-    char *r = fgets(*l, sizeof(*l), f);
-    (*l)[strcspn(*l, "\n")]=0;
-    return (r) ? 1 : 0;
+// Unsure of where to put this... It's here for now....
+
+std::optional<std::string> getToken(std::stringstream& stream){
+    std::string token, temp;
+    getline(stream, token, ',');
+    if(stream.fail()) return std::nullopt;
+    getline(stream, temp, ' '); // a little smelly, but idc
+    return token;
 }
-/* Constructor Helper */
-size_t readField(char **str, char *out){
-    // trim leading
-    while(isspace((unsigned char)*(*str))) (*str)++;
 
-    // get length of str
-    size_t str_len = strcspn(*str, "\0");
+struct eventDescription getDescFromString(std::string line){
+    std::string name;
+    float startTime;
+    int numRounds;
+    float roundLength;
+    std::string token;
+    std::stringstream stream(line);
 
-    // get addr of ","
-    char *end = (*str) + strcspn(*str, ",");
+    if((name = getToken(stream).value_or("")) == "")
+        goto badData;
+    if((startTime = std::stof(getToken(stream).value_or("0"))) == 0)
+        goto badData;
+    if((numRounds = std::stoi(getToken(stream).value_or("0"))) == 0)
+        goto badData;
+    if((roundLength = std::stof(getToken(stream).value_or("0"))) == 0)
+        goto badData;
+    roundLength /= 60.0;
 
-    // trim trailing
-    char *comma = end-1;
-    while(comma > *str && isspace((unsigned char)*comma)) comma--;
-    comma++;
-
-    // copy trimmed string and add null terminator
-    size_t out_size = (size_t)(comma - *str) < str_len ? (comma - *str) : str_len;
-    memcpy(out, *str, out_size);
-    out[out_size] = 0;
-
-    // move str forward
-    *str = *end ? end + 1 : end;
-
-    return out_size;
+    return {
+        .name = std::move(name),
+        .startTime = startTime,
+        .numRounds = numRounds,
+        .roundLength = roundLength,
+    };
+badData: return {};
 }
-/* Constructor */
-Show::Show(char *fileName) {
-    this->startTime = 1000;
-    this->endTime = 0;
-    // First line is header data
-    char line[256];
-    char field[128];
-    FILE *fptr = fopen(fileName, "r");
-    if(fptr == NULL){
-        fprintf(stderr, "Whoopsie, that file doesn't exist\n");
-        return;
+
+std::optional<Show> Show::createFromFile(std::string fileName) {
+    float startTime = 1000;
+    float endTime = 0;
+    std::vector<Event> events;
+    std::string line;
+    std::ifstream eventStream;
+    struct eventDescription currEventDesc = {};
+
+    eventStream.open(fileName);
+    if(eventStream.fail()){
+        std::cerr << "Whoopsie, that file doesn't exist\n";
+        return std::nullopt;
     }
 
-    readline(&line, fptr);
-    while(readline(&line, fptr)){
-        Event e;
-        char *l = (char *)line;
-        int start;
-
-        // Read Name
-        readField(&l, (char *)field);
-        memcpy(e.name, field, 128);
-
-        // Read Start Time
-        readField(&l, (char *)field);
-        if(*field == 0){
-            fprintf(stderr, "%s has an incorrect value for Start Time. Aborting\n", e.name);
-            exit(1);
+    //Skip Header Line
+    getline(eventStream, line);
+    while(getline(eventStream, line)){
+        currEventDesc = getDescFromString(line);
+        if(currEventDesc.isEmpty()){
+            std::cerr << "Error extracting file data\n";
+            return std::nullopt;
         }
-        start = atoi(field);
-        e.startTime = start;
-        if(start < this->startTime)
-            this->startTime = start;
-
-        // Read Num Rounds
-        readField(&l, (char *)field);
-        e.numRounds = atoi(field);
-        if(*field == 0){
-            fprintf(stderr, "%s has an incorrect value for Number of Rounds. Aborting\n", e.name);
-            exit(1);
-        }
-
-        // Read Round Length
-        readField(&l, (char *)field);
-        e.roundLength = (float)atoi(field) / 60;
-        if(*field == 0){
-            fprintf(stderr, "%s has an incorrect value for Round Length. Aborting\n", e.name);
-            exit(1);
-        }
-
-        for(int i = 0; i < e.numRounds; i++) {
-            Round r;
-            r.startTime = start + (e.roundLength * i);
-            r.endTime = r.startTime + e.roundLength;
-            e.rounds.push_back(r);
-            if(r.startTime + e.roundLength > this->endTime)
-                this->endTime = r.startTime + e.roundLength;
-        }
-        e.endTime = e.rounds[0].startTime + e.numRounds * e.roundLength;
-
-        this->events.push_back(e);
+        Event e = Event::createFromDescription(currEventDesc);
+        startTime = std::min(startTime, e.getStartTime());
+        endTime = std::max(endTime, e.getEndTime());
+        events.push_back(e);
     }
-    fclose(fptr);
-    return;
+    return Show(Member{
+        .startTime = startTime,
+        .endTime = endTime,
+        .events = std::move(events),
+    });
 }
-
-int partition(std::vector<Event> &events, int low, int high){
-    int pivot = events[high].rounds[0].startTime;
-    int i = (low - 1);
-
-    for(int j = low; j < high; j++){
-        if(events[j].rounds[0].startTime <= pivot) {
-            i++;
-            std::swap(events[i], events[j]);
-        }
+Show Show::createFromEventVec(const std::vector<Event>& events) {
+    Event t = events[0];
+    float start = t.getStartTime();
+    float end = t.getEndTime();
+    int i = 0;
+    for(auto e : events){
+        start = std::min(start, e.getStartTime());
+        end = std::max(end, e.getEndTime());
+        i++;
     }
-    std::swap(events[i+1], events[high]);
-
-    return (i+1);
+    return Show(Member{
+        .startTime = start,
+        .endTime = end,
+        .events = std::move(events),
+    });
 }
 
-void sortShow(std::vector<Event> &events, int low, int high){
-    if(low < high) {
-        int pi = partition(events, low, high);
-        sortShow(events, low, pi - 1);
-        sortShow(events, pi + 1, high);
-    }
+void Show::sortByStartTime() {
+    auto v = &this->m.events;
+    std::sort(v->begin(), v->end(), [](Event a, Event b) {
+                                        return a.getStartTime() < b.getStartTime();
+                                    });
 }
 
-void Show::sort() {
-    sortShow(this->events, 0, this->events.size() - 1);
-}
-
-void Show::push_back(Event event){
-    this->events.push_back(event);
-}
-
-void Show::pop(int index) {
-    this->events.erase(this->events.begin()+index);
-}
-
-bool Show::empty(){
-    return this->events.empty();
-}
-
-Event &Show::operator[](unsigned int i){
-    return this->events[i];
-}
-
-float Show::getStartTime(){
-    return this->startTime;
-}
-float Show::getEndTime(){
-    return this->endTime;
-}
-std::vector<Event> Show::getShowAsVector(){
-    return this->events;
-}
-
-size_t Show::size(){
-    return this->events.size();
+void EprintRound(std::string name, Round r){
+    std::cout << "|" + name.substr(0, r.roundLength * 5);
 }
 
 void Show::print() {
-    // Header
-    for(float i = this->startTime; i < this->endTime; i++)
+    std::cout << std::endl;
+    for(float i = this->m.startTime; i < this->m.endTime; i++)
         printf("|%2d|.5", (int)i);
     printf("|\n");
 
-    std::vector<Event> events = this->events;
+    std::vector<Event> events = this->m.events;
     for(size_t i = 0; i < events.size(); i++){
         Event event = events[i];
-        char sub[10];
-        int sublen = events[i].roundLength * 5;
-        memcpy(sub, events[i].name, sublen);
-        sub[sublen] = 0; // Compiler moves the sub declaration to outside the loop...
         // Print Leading blocks
-        for(float j = 0; j < event.startTime - this->startTime; j+=0.5)
+        for(float j = 0; j < event.getStartTime() - this->m.startTime; j+=0.5)
             printf("|  ");
 
-        for(int k = 0; k < event.numRounds; k++){
-            printf("|%s", sub);
+        for(int k = 0; k < event.getNumRounds(); k++){
+            EprintRound(event.getName(), event[k]);
         }
 
-        float j = event.startTime + event.roundLength * event.numRounds;
-        for(; j < this->endTime; j+=0.5)
+        float j = event.getEndTime();
+        for(; j < this->m.endTime; j+=0.5)
             printf("|  ");
         printf("|\n");
     }

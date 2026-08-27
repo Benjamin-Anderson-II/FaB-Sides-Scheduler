@@ -4,13 +4,6 @@
 #include <vector>
 #include "event.h"
 #include "show.h"
-#include <cstdint>
-
-typedef struct {
-    float startShiftTime;
-    float endShiftTime;
-    std::vector<Event> events;
-} Judge;
 
 enum BreakType {
     NOBREAKS,
@@ -18,15 +11,32 @@ enum BreakType {
     HOURANDHALF
 };
 
+struct Judge {
+    float startTime;
+    float endTime;
+    enum BreakType breakType;
+    std::vector<Event> events;
+};
+
+
 class Team {
     private:
-        enum BreakType breakType;
-        std::vector<Judge> judges;
+        struct Member {
+            std::vector<Judge> judges;
+        } m;
+        explicit Team(Member m) : m(std::move(m)) {}
     public:
-        Team(uint32_t numTeam, enum BreakType breakType, float AM, float PM);
+        class SortProof {
+            SortProof() = default;
+            friend SortProof sortByStartTime();
+        };
+        static Team create(int, enum BreakType, float, float);
+        static Team merge(Team&, Team&);
+        
+        auto sortByStartTime() -> SortProof;
+        bool allotTo(const std::vector<Event>&, const SortProof&);
 
-        void allotTo(Show show);
-        void resize(uint32_t numTeam);
+        int getNumJudges(){return this->m.judges.size();}
         
         void print();
 };

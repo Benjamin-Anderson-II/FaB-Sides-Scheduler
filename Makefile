@@ -5,7 +5,7 @@
 # http://nuclear.mutantstargoat.com/articles/make/
 
 CC = g++
-CFLAGS := -std=c++11
+CFLAGS := -std=c++17
 
 BINDIR = .
 exe_file = $(BINDIR)/$(shell basename "${PWD}")

@@ -1,149 +1,94 @@
 #include "team.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <cstring>
+#include <algorithm>
+#include <vector>
+#include <iostream>
 
-// Helper Function Prototypes
-void allotNoBreaks(std::vector<Judge> &judges, Show show);
-void allotHourOnly(std::vector<Judge> &judges, Show show);
-void allotHourAndHalf(std::vector<Judge> &judges, Show show);
-void splitEventAtRoundIndex(Show &show, int eventIndex, int roundIndex);
-
-// round index is the first round that is to be split off
-void splitEventAtRoundIndex(Show &show, int eventIndex, int roundIndex){
-    if(roundIndex < 1) return;
-    Event event = show[eventIndex];
-
-    Event newEvent;
-    memcpy(newEvent.name, event.name, 128);
-    newEvent.roundLength = event.roundLength;
-    newEvent.numRounds = event.numRounds - roundIndex;
-    newEvent.startTime = event.rounds[roundIndex].startTime;
-    newEvent.endTime = event.endTime;
-    printf("1");
-    for(int i = 0; show[eventIndex].numRounds > roundIndex; i++){
-        printf("2");
-        newEvent.rounds.push_back(event.rounds[roundIndex+i]); // shallow copy OK, since it's a struct
-        event.rounds.erase(event.rounds.begin() + roundIndex+i);
-        show[eventIndex].numRounds--;
+Team Team::create(int numTeam, enum BreakType breakType, float startTime, float endTime) {
+    std::vector<Judge> judges(numTeam);
+    for (auto &j : judges) {
+        j.startTime = startTime;
+        j.endTime = endTime;
+        j.breakType = breakType;
     }
-    printf("3");
-    show[eventIndex].endTime = show[eventIndex].rounds.back().endTime;
-    printf("4");
-    show.push_back(newEvent);
-    printf("\n");
+
+    return Team(Member{
+        .judges = std::move(judges),
+    });
+}
+Team Team::merge(Team &a, Team &b) {
+    std::vector<Judge> tempJudges = a.m.judges;
+    tempJudges.insert(tempJudges.end(), b.m.judges.begin(), b.m.judges.end());
+    return Team(Member{
+        .judges = std::move(tempJudges),
+    });
 }
 
-// CONSTRUCTOR
-Team::Team(uint32_t numTeam, enum BreakType breakType, float startAM, float startPM) {
-    this->breakType = breakType;
-    this->judges.resize(numTeam);
-    // NOTE: THIS IS TEMPORARY, AND JUST A HEURISTIC
-    for(int i = 0; i < numTeam; i++){
-        this->judges[i].startShiftTime = (i<=numTeam/2) ? startAM : startPM;
-        this->judges[i].endShiftTime   = (i<=numTeam/2) ? startAM+11: startPM+11;
-    }
+/***** MEMBER FUNCTIONS *****/
+auto Team::sortByStartTime() -> SortProof {
+    auto v = &this->m.judges;
+    std::sort(v->begin(), v->end(), [](Judge a, Judge b) {
+        return a.startTime < b.startTime;
+    });
+    return {};
 }
 
-// MEMBER FUNCTIONS
-void Team::allotTo(Show show) {
-    switch(this->breakType){
-        case NOBREAKS:
-            allotNoBreaks(this->judges, show);
-            break;
-        case HOURONLY:
-            allotHourOnly(this->judges, show);
-            break;
-        case HOURANDHALF:
-            allotHourAndHalf(this->judges, show);
-            break;
-        default:
-            break;
-    }
-}
-void allotNoBreaks(std::vector<Judge> &judges, Show show){
-    // give each judge their initial event
-    // repeat this process
-    while(!show.empty()){
-        for(size_t i = 0; i < judges.size(); i++){
-            Judge judge = judges[i];
-            for(size_t j = 0; j < show.size(); j++){
-                Event event = show[j];
-                if(event.startTime < judge.startShiftTime)
-                    continue;
-                if(!judge.events.empty() && (
-                    event.startTime < judge.events.back().endTime
-                ))
-                    continue;
-                
-                // For Show that end after judge's shift
-                if(event.endTime > judge.endShiftTime){
-                    printf("Judge will end shift too early\n");
-                    // Find which round is the one that goes over
-                    // Create a new event for it and push it to the back of the events list
-                    for(int x = 0; x < event.numRounds; x++){
-                        if(event.rounds[x].endTime <= judge.endShiftTime){
-                            // printf("  - roundEnd: %f\n", event.rounds[x].endTime);
-                            continue;
-                        }
-                        printf("splitting\n");
-                        splitEventAtRoundIndex(show, j, x);
-                        break;
-                    }
-                }
-                judges[i].events.push_back(show[j]);
-                printf("judge %2ld assigned %s\n", i, event.name);
-                // printf("erased    - %s\n", event.name);
-                // printf("numShow - %ld\n", events.size());
-                show.pop(j);
-                j--;
-                break;
-            }
+
+bool Team::allotTo(const std::vector<Event> &events, const SortProof &proof) {
+    auto *judges = &(this->m.judges);
+    const auto numJudges = judges->size();
+    std::vector<bool> isJudgeActive;
+    isJudgeActive.assign(numJudges, false);
+
+    auto splitEvents = events;
+    size_t judgeIndex = 0;
+    for (size_t eventIndex = 0; eventIndex < splitEvents.size(); eventIndex++) {
+        auto event = splitEvents[eventIndex];
+        auto judge = (*judges)[judgeIndex];
+
+        // Skip judges who aren't available
+        while(judge.endTime < event.getStartTime() ||
+              isJudgeActive[judgeIndex]){
+            judgeIndex = (judgeIndex + 1) % numJudges;
+            judge = (*judges)[judgeIndex];
         }
+
+        //Split Event if judge can't finish it
+        if(judge.endTime < event.getEndTime()){
+            auto split = Event::splitEventAtTime(event, judge.endTime);
+            splitEvents.erase(splitEvents.begin()+eventIndex);
+            splitEvents.insert(splitEvents.begin()+eventIndex, split[0]);
+            splitEvents.push_back(split[1]);
+            isJudgeActive[judgeIndex] = true;
+        }
+
+        // Give Judge Event
+        (*judges)[judgeIndex].events.push_back(event);
+
+        judgeIndex = (judgeIndex + 1) % numJudges;
     }
+    return true;
 }
-void allotHourOnly(std::vector<Judge> &judges, Show events){}
-void allotHourAndHalf(std::vector<Judge> &judges, Show events){}
 
-
-void Team::resize(uint32_t numTeam) {
-    this->judges.resize(numTeam);
+void EprintRound(std::string name, float roundLength){
+    std::cout << "|" + name.substr(0, roundLength * 5);
 }
 
 void Team::print() {
-    for(size_t j = 0; j < this->judges.size(); j++){
-        Judge judge = this->judges[j];
+    std::cout << std::endl;
+    for(float i = 9; i < 21.5; i++)
+        printf("|%2d|.5", (int)i);
+    printf("|\n");
+    for(auto j : this->m.judges) {
+        float prevEventEnd = 0;
+        for(auto e : j.events){
+            for(float i = prevEventEnd; i < e.getStartTime() - 9; i+=0.5)
+                std::cout << "|  ";
+            for(int i = 0; i < e.getNumRounds(); i++)
+                EprintRound(e.getName(), e[i].roundLength);
 
-        //printf("Judge %2ld: ", j);
-        // skip unscheduled judges
-        if(judge.events.size() <= 0){
-            printf("\n");
-            continue;
+            prevEventEnd = e.getEndTime() - 9;
         }
-
-        float start = judge.events[0].startTime;
-        float end   = judge.events.back().endTime;
-
-        // Leading characters
-        for(float i = 0; i < start - 9; i +=0.5) printf("|  ");
-
-        for(size_t i = 0; i < judge.events.size(); i++){
-            Event event = judge.events[i];
-            char sub[10];
-            int sublen = event.roundLength * 5;
-            memcpy(sub, event.name, sublen);
-            sub[sublen] = 0;
-            if(i==0){
-                for(int a = 0; a < event.numRounds; a++)
-                    printf("|%s", sub);
-                continue;
-            }
-            for(float a = judge.events[i-1].endTime; a < event.startTime; a+=0.5)
-                printf("|  ");
-            for(float b = 0; b < event.numRounds; b++)
-                printf("|%s", sub);
-        }
-        printf("|\t\tJudge: %2ld\n", j);
+        std::cout << std::endl;
     }
 }

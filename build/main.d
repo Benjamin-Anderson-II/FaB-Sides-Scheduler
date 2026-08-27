@@ -1,1 +1,1 @@
-build/main.o: main.cpp events.h event.h judges.h
+build/main.o: main.cpp show.h event.h team.h

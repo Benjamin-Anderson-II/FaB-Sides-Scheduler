@@ -1,32 +1,31 @@
 #ifndef FAB_SHOW_H
 #define FAB_SHOW_H
 
+#include <optional>
 #include <vector>
-#include <cstddef>
 #include "event.h"
 
 class Show {
     private:
-        std::vector<Event> events;
-        float startTime;
-        float endTime;
+        struct Member {
+            float startTime;
+            float endTime;
+            std::vector<Event> events;
+        } m;
+        explicit Show(Member m) : m(std::move(m)) {}
     public:
-        // Constructors
-        Show(char *fileName);
-
+        static std::optional<Show> createFromFile(std::string);
+        static Show createFromEventVec(const std::vector<Event>&);
         // Getters
-        Event &operator[](unsigned int i);
-        float getStartTime();
-        float getEndTime();
-        std::vector<Event> getShowAsVector();
-        size_t size();
+        Event &operator[](unsigned int i){return this->m.events[i];}
+        float getStartTime(){return this->m.startTime;}
+        float getEndTime(){return this->m.endTime;}
+        std::vector<Event> getEvents(){return this->m.events;}
+        size_t size(){return this->m.events.size();}
 
         // Functionality
-        void sort();
+        void sortByStartTime();
         void print();
-        void push_back(Event event);
-        void pop(int index);
-        bool empty();
 };
 
 #endif
