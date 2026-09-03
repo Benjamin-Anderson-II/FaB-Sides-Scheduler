@@ -11,12 +11,12 @@ int main (int argc, const char *argv[]) {
     if(maybeShow.has_value() == false)
         return 1;
     auto show = maybeShow.value();
-    show.sortByStartTime();
+    ShowSortedProof p_show = sortShowByStartTime(show);
     show.print();
 
     Team all = Team::merge(am, pm);
-    Team::SortProof p = all.sortByStartTime();
-    all.allotTo(show.getEvents(), p);
+    TeamSortedProof p_team = sortTeamByStartTime(all);
+    all.allotTo(show.m.events, p_show, p_team);
 
     all.print();
 

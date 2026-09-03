@@ -4,13 +4,19 @@
 #include <vector>
 #include <iostream>
 
+Judge Judge::create(float start, float end, BreakType breakType) {
+    return Judge(Member {
+        .startTime = start,
+        .endTime = end,
+        .breakType = breakType,
+        .events = std::vector<Event>(),
+    });
+}
+
 Team Team::create(int numTeam, enum BreakType breakType, float startTime, float endTime) {
-    std::vector<Judge> judges(numTeam);
-    for (auto &j : judges) {
-        j.startTime = startTime;
-        j.endTime = endTime;
-        j.breakType = breakType;
-    }
+    std::vector<Judge> judges;
+    for(int i = 0; i < numTeam; i++)
+        judges.push_back(Judge::create((startTime), endTime, breakType));
 
     return Team(Member{
         .judges = std::move(judges),
@@ -25,16 +31,17 @@ Team Team::merge(Team &a, Team &b) {
 }
 
 /***** MEMBER FUNCTIONS *****/
-auto Team::sortByStartTime() -> SortProof {
-    auto v = &this->m.judges;
+auto sortTeamByStartTime(Team& team) -> TeamSortedProof {
+    auto v = &team.m.judges;
     std::sort(v->begin(), v->end(), [](Judge a, Judge b) {
-        return a.startTime < b.startTime;
+        return a.m.startTime < b.m.startTime;
     });
     return {};
 }
 
 
-bool Team::allotTo(const std::vector<Event> &events, const SortProof &proof) {
+bool Team::allotTo(const std::vector<Event> &events,
+                   const ShowSortedProof &s, const TeamSortedProof& t) {
     auto *judges = &(this->m.judges);
     const auto numJudges = judges->size();
     std::vector<bool> isJudgeActive;
@@ -47,15 +54,15 @@ bool Team::allotTo(const std::vector<Event> &events, const SortProof &proof) {
         auto judge = (*judges)[judgeIndex];
 
         // Skip judges who aren't available
-        while(judge.endTime < event.getStartTime() ||
+        while(judge.m.endTime < event.startTime() ||
               isJudgeActive[judgeIndex]){
             judgeIndex = (judgeIndex + 1) % numJudges;
             judge = (*judges)[judgeIndex];
         }
 
         //Split Event if judge can't finish it
-        if(judge.endTime < event.getEndTime()){
-            auto split = Event::splitEventAtTime(event, judge.endTime);
+        if(judge.m.endTime < event.endTime()){
+            auto split = Event::splitEventAtTime(event, judge.m.endTime);
             splitEvents.erase(splitEvents.begin()+eventIndex);
             splitEvents.insert(splitEvents.begin()+eventIndex, split[0]);
             splitEvents.push_back(split[1]);
@@ -63,7 +70,7 @@ bool Team::allotTo(const std::vector<Event> &events, const SortProof &proof) {
         }
 
         // Give Judge Event
-        (*judges)[judgeIndex].events.push_back(event);
+        (*judges)[judgeIndex].m.events.push_back(event);
 
         judgeIndex = (judgeIndex + 1) % numJudges;
     }
@@ -74,21 +81,22 @@ void EprintRound(std::string name, float roundLength){
     std::cout << "|" + name.substr(0, roundLength * 5);
 }
 
+void Judge::print() {
+    float prevEventEnd = 0;
+    for(auto e : this->m.events) {
+        for(auto i = prevEventEnd; i < e.startTime() - 9; i+=0.5)
+            std::cout << "| ";
+        for(size_t i = 0; i < e.m.rounds.size(); i++)
+            EprintRound(e.m.name, e[i].roundLength);
+        prevEventEnd = e.endTime() - 9;
+    }
+    std::cout<<std::endl;
+}
+
 void Team::print() {
     std::cout << std::endl;
     for(float i = 9; i < 21.5; i++)
         printf("|%2d|.5", (int)i);
     printf("|\n");
-    for(auto j : this->m.judges) {
-        float prevEventEnd = 0;
-        for(auto e : j.events){
-            for(float i = prevEventEnd; i < e.getStartTime() - 9; i+=0.5)
-                std::cout << "|  ";
-            for(int i = 0; i < e.getNumRounds(); i++)
-                EprintRound(e.getName(), e[i].roundLength);
-
-            prevEventEnd = e.getEndTime() - 9;
-        }
-        std::cout << std::endl;
-    }
+    for(auto j : this->m.judges) j.print();
 }

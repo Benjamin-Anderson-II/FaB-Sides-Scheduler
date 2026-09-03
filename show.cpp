@@ -8,7 +8,6 @@
 #include <cstdio>
 
 // Unsure of where to put this... It's here for now....
-
 std::optional<std::string> getToken(std::stringstream& stream){
     std::string token, temp;
     getline(stream, token, ',');
@@ -67,8 +66,8 @@ std::optional<Show> Show::createFromFile(std::string fileName) {
             return std::nullopt;
         }
         Event e = Event::createFromDescription(currEventDesc);
-        startTime = std::min(startTime, e.getStartTime());
-        endTime = std::max(endTime, e.getEndTime());
+        startTime = std::min(startTime, e.startTime());
+        endTime = std::max(endTime, e.endTime());
         events.push_back(e);
     }
     return Show(Member{
@@ -79,12 +78,12 @@ std::optional<Show> Show::createFromFile(std::string fileName) {
 }
 Show Show::createFromEventVec(const std::vector<Event>& events) {
     Event t = events[0];
-    float start = t.getStartTime();
-    float end = t.getEndTime();
+    float start = t.startTime();
+    float end = t.endTime();
     int i = 0;
     for(auto e : events){
-        start = std::min(start, e.getStartTime());
-        end = std::max(end, e.getEndTime());
+        start = std::min(start, e.startTime());
+        end = std::max(end, e.endTime());
         i++;
     }
     return Show(Member{
@@ -94,11 +93,12 @@ Show Show::createFromEventVec(const std::vector<Event>& events) {
     });
 }
 
-void Show::sortByStartTime() {
-    auto v = &this->m.events;
+auto sortShowByStartTime(Show& show) -> ShowSortedProof {
+    auto v = &show.m.events;
     std::sort(v->begin(), v->end(), [](Event a, Event b) {
-                                        return a.getStartTime() < b.getStartTime();
-                                    });
+        return a.startTime() < b.startTime();
+    });
+    return {};
 }
 
 void EprintRound(std::string name, Round r){
@@ -115,14 +115,14 @@ void Show::print() {
     for(size_t i = 0; i < events.size(); i++){
         Event event = events[i];
         // Print Leading blocks
-        for(float j = 0; j < event.getStartTime() - this->m.startTime; j+=0.5)
+        for(float j = 0; j < event.startTime() - this->m.startTime; j+=0.5)
             printf("|  ");
 
-        for(int k = 0; k < event.getNumRounds(); k++){
-            EprintRound(event.getName(), event[k]);
+        for(int k = 0; k < event.m.rounds.size(); k++){
+            EprintRound(event.m.name, event[k]);
         }
 
-        float j = event.getEndTime();
+        float j = event.endTime();
         for(; j < this->m.endTime; j+=0.5)
             printf("|  ");
         printf("|\n");

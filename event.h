@@ -21,13 +21,13 @@ struct eventDescription {
 };
 
 class Event {
-    private:
+    public:
         struct Member {
             std::string name;
             std::vector<Round> rounds;
         } m;
         explicit Event(Member m) : m(std::move(m)) {}
-    public:
+
         static Event createFromDescription(eventDescription);
         static Event createFromRoundVec(std::string, std::vector<Round>&);
 
@@ -35,12 +35,10 @@ class Event {
 
         // Getters
         Round &operator[](unsigned int i){return this->m.rounds[i];}
-        Round getFirstRound() {return this->m.rounds.front();}
-        Round getLastRound()  {return this->m.rounds.back();}
-        float getStartTime() {return this->m.rounds.front().startTime;}
-        float getEndTime()   {return this->m.rounds.back().endTime;}
-        int getNumRounds()   {return this->m.rounds.size();}
-        std::string getName(){return this->m.name;}
+        Round firstRound() {return this->m.rounds.front();}
+        Round lastRound()  {return this->m.rounds.back();}
+        float startTime() {return this->m.rounds.front().startTime;}
+        float endTime()   {return this->m.rounds.back().endTime;}
 };
 
 #endif

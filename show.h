@@ -4,28 +4,29 @@
 #include <optional>
 #include <vector>
 #include "event.h"
+struct Show;
 
-class Show {
-    private:
-        struct Member {
-            float startTime;
-            float endTime;
-            std::vector<Event> events;
-        } m;
-        explicit Show(Member m) : m(std::move(m)) {}
-    public:
-        static std::optional<Show> createFromFile(std::string);
-        static Show createFromEventVec(const std::vector<Event>&);
-        // Getters
-        Event &operator[](unsigned int i){return this->m.events[i];}
-        float getStartTime(){return this->m.startTime;}
-        float getEndTime(){return this->m.endTime;}
-        std::vector<Event> getEvents(){return this->m.events;}
-        size_t size(){return this->m.events.size();}
+class ShowSortedProof {
+    ShowSortedProof() = default;
+    friend auto sortShowByStartTime(Show&) -> ShowSortedProof;
+};
 
-        // Functionality
-        void sortByStartTime();
-        void print();
+auto sortShowByStartTime(Show&) -> ShowSortedProof;
+
+struct Show {
+    struct Member {
+        float startTime;
+        float endTime;
+        std::vector<Event> events;
+    } m;
+
+    explicit Show(Member m) : m(std::move(m)) {}
+
+    static std::optional<Show> createFromFile(std::string);
+    static Show createFromEventVec(const std::vector<Event>&);
+
+    // Functionality
+    void print();
 };
 
 #endif
